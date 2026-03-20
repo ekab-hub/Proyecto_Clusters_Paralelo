@@ -1,16 +1,20 @@
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <vector>
-#include <cmath>
-#include <cstdlib>
-#include <chrono>
-#include <limits>
-#include <string>
+
+#include <iostream> // cout, cerr
+#include <fstream>  // ifstream, ofstream
+#include <sstream>  // stringstream (para parsear CSV)
+#include <vector>   // vector
+#include <cmath>    // sqrt, pow
+#include <cstdlib>  // atoi, atof
+#include <chrono>   // medición de tiempo
+#include <limits>   // numeric_limits
+#include <string>   // string
 
 using namespace std;
 using namespace chrono;
 
+// -------------------------------------------------------
+// ESTRUCTURA: un punto en 2D o 3D
+// -------------------------------------------------------
 struct Punto
 {
     double x, y, z; // coordenadas (z=0 si es 2D)
@@ -18,7 +22,9 @@ struct Punto
     int dims;       // 2 o 3
 };
 
-// Distancia euclidiana entre dos puntos
+// -------------------------------------------------------
+// FUNCIÓN: distancia euclidiana entre dos puntos
+// -------------------------------------------------------
 double distancia(const Punto &a, const Punto &b)
 {
     double dx = a.x - b.x;
@@ -27,7 +33,10 @@ double distancia(const Punto &a, const Punto &b)
     return sqrt(dx * dx + dy * dy + dz * dz);
 }
 
-// Leer CSV de entrada
+// -------------------------------------------------------
+// FUNCIÓN: leer CSV de entrada
+// Detecta automáticamente 2D o 3D según número de columnas
+// -------------------------------------------------------
 vector<Punto> leer_csv(const string &ruta)
 {
     vector<Punto> puntos;
@@ -81,6 +90,11 @@ vector<Punto> leer_csv(const string &ruta)
     return puntos;
 }
 
+// -------------------------------------------------------
+// FUNCIÓN: inicializar centroides
+// Tomamos los primeros K puntos como centroides iniciales.
+// Simple pero reproducible (mismo resultado siempre).
+// -------------------------------------------------------
 vector<Punto> inicializar_centroides(const vector<Punto> &puntos, int k)
 {
     vector<Punto> centroides;
@@ -222,3 +236,29 @@ int main(int argc, char *argv[])
 
     // --- Medir tiempo de inicio ---
     auto t_inicio = high_resolution_clock::now();
+
+    // --- Ciclo principal de K-Means ---
+    int iteracion = 0;
+    bool cambio = true;
+
+    while (cambio && iteracion < MAX_ITER)
+    {
+        cambio = asignar_clusters(puntos, centroides);
+        centroides = recalcular_centroides(puntos, K);
+        iteracion++;
+    }
+
+    // --- Medir tiempo de fin ---
+    auto t_fin = high_resolution_clock::now();
+    double tiempo_ms = duration<double, milli>(t_fin - t_inicio).count();
+
+    cout << "Iteraciones: " << iteracion << endl;
+    cout << "Tiempo     : " << tiempo_ms << " ms" << endl;
+
+    // --- Guardar resultados ---
+    string ruta_salida = ruta_entrada.substr(0, ruta_entrada.find_last_of('.')) + "_clusters.csv";
+    guardar_csv(puntos, ruta_salida);
+    cout << "Salida     : " << ruta_salida << endl;
+
+    return 0;
+}
