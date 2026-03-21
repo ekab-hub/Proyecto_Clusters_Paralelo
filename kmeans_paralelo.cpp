@@ -1,4 +1,3 @@
-
 #include <iostream> // cout
 #include <fstream>  // leer y escribir archivos
 #include <sstream>  // separar cadenas
@@ -8,6 +7,7 @@
 #include <chrono>   // tiempo
 #include <limits>   // max o min
 #include <string>   // string
+#include <omp.h>    // PARALELISMO
 
 using namespace std; // facilita escritura como cout
 
@@ -109,7 +109,7 @@ bool asignar_clusters(vector<Punto> &puntos, const vector<Punto> &centroides) //
 {
     bool hubo_cambio = false; // variable de control
 
-    #pragma omp parallel for schedule(static) reduction(||:hubo_cambio)
+#pragma omp parallel for schedule(static) reduction(|| : hubo_cambio)
     for (int i = 0; i < (int)puntos.size(); i++) // recorre todos los puntos del vector
     {
         double min_dist = numeric_limits<double>::max(); // inicializa con un valor muy grande
@@ -138,46 +138,37 @@ bool asignar_clusters(vector<Punto> &puntos, const vector<Punto> &centroides) //
 
 vector<Punto> recalcular_centroides(vector<Punto> puntos, vector<Punto> centroides, int k)
 {
-    // Guardar las sumas de coordenadas de cada cluster
-    vector<double> suma_x(k, 0.0);
-    vector<double> suma_y(k, 0.0);
-    vector<double> suma_z(k, 0.0);
+    // Usamos arreglos C puros (no vector) porque OpenMP reduction solo soporta reduccion de arreglos con esta sintaxis
+    double suma_x[k] = {};
+    double suma_y[k] = {};
+    double suma_z[k] = {};
+    int conteo[k] = {};
 
-    // Guardar cuántos puntos hay en cada cluster
-    vector<int> conteo(k, 0);
-
-    // Recorrer todos los puntos y acumular sus coordenadas en su cluster
-    for (int i = 0; i < puntos.size(); i++)
+#pragma omp parallel for schedule(static) reduction(+ : suma_x[ : k], suma_y[ : k], suma_z[ : k], conteo[ : k])
+    for (int i = 0; i < (int)puntos.size(); i++)
     {
         int c = puntos[i].cluster;
-
-        suma_x[c] = suma_x[c] + puntos[i].x;
-        suma_y[c] = suma_y[c] + puntos[i].y;
-        suma_z[c] = suma_z[c] + puntos[i].z;
-
-        conteo[c] = conteo[c] + 1;
+        suma_x[c] += puntos[i].x;
+        suma_y[c] += puntos[i].y;
+        suma_z[c] += puntos[i].z;
+        conteo[c]++;
     }
 
-    // Crear los nuevos centroides
     vector<Punto> nuevos_centroides(k);
-
     for (int j = 0; j < k; j++)
     {
         if (conteo[j] > 0)
         {
-            // Si el cluster sí tiene puntos, calcular el promedio
             nuevos_centroides[j].x = suma_x[j] / conteo[j];
             nuevos_centroides[j].y = suma_y[j] / conteo[j];
             nuevos_centroides[j].z = suma_z[j] / conteo[j];
         }
         else
         {
-            // Si el cluster quedó vacío, conservar el centroide anterior
             nuevos_centroides[j].x = centroides[j].x;
             nuevos_centroides[j].y = centroides[j].y;
             nuevos_centroides[j].z = centroides[j].z;
         }
-
         nuevos_centroides[j].cluster = j;
         nuevos_centroides[j].dims = puntos[0].dims;
     }
@@ -214,16 +205,19 @@ void guardar_csv(const vector<Punto> &puntos, const string &ruta)
 int main(int argc, char *argv[])
 {
 
-    if (argc != 4) // Si no se pasan exactamente 4 argumentos, muestra como se debe de ejecutar
+    if (argc != 5) // Si no se pasan exactamente 4 argumentos, muestra como se debe de ejecutar
     {
-        cerr << "Uso: ./kmeans_serial <archivo.csv> <K> <max_iter>" << endl;
-        cerr << "Ejemplo: ./kmeans_serial datos.csv 5 100" << endl;
+        cerr << "Uso: ./kmeans_serial <archivo.csv> <K> <max_iter> <num_hilos>" << endl;
+        cerr << "Ejemplo: ./kmeans_serial datos.csv 5 100 4" << endl;
         return 1;
     }
 
     string ruta_entrada = argv[1]; // primer argumento es la ruta del csv
     int K = stoi(argv[2]);         // segundo argumento es numero de clusters y convierte a entero
     int MAX_ITER = stoi(argv[3]);  // tercer argumento maximas iteraciones y convierte a entero
+    int num_hilos = stoi(argv[4]); // cuarto argumento numero de hilos
+
+    omp_set_num_threads(num_hilos);
 
     // imprime info y carga al archivo
     cout << "Leyendo: " << ruta_entrada << endl;
